@@ -16,7 +16,7 @@ export default function Home() {
       <Navbar />
 
       <section className="main-section">
-          <div className="page-heading">
+          <div className="page-heading py-16">
                 <h1>
                     Track your Application & Resume Ratings
                 </h1>

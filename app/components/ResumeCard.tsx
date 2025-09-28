@@ -1,21 +1,34 @@
 import React from 'react'
 import {Link} from 'react-router'
-const ResumeCard = ({resume}: {resume: Resume}) => {
+import ScoreCircle from "~/components/ScoreCircle";
+const ResumeCard = ({resume : {id, companyName, jobTitle, feedback, imagePath }}: {resume: Resume}) => {
     return (
-        <Link to={`/resumes/${resume.companyName}`}
+        <Link to={`/resumes/${companyName}`}
               className='resume-card animate-in fade-in duration-1000'
         >
-            <div className='flex flex-col gap-2'>
-                <h2 className='!text-black font-bold breack-words'>
-                    {resume.companyName}
-                </h2>
-                <h3 className='text-lg break-words text-gray-500'>
-                    {resume.jobTitle}
-                </h3>
+            <div className='resume-card-header'>
+                <div className='flex flex-col gap-2'>
+                    <h2 className='!text-black font-bold breack-words'>
+                        {companyName}
+                    </h2>
+                    <h3 className='text-lg break-words text-gray-500'>
+                        {jobTitle}
+                    </h3>
+                </div>
+
+                <div className='flex-shrink-0'>
+                    <ScoreCircle score={feedback.overallScore} />
+                </div>
             </div>
 
-            <div className='flex-shrink-0'>
-
+            <div className='gradiant-border animate-in fade-in duration-1000'>
+                <div className='w-full h-full'>
+                    <img
+                        src={imagePath}
+                        alt='resume'
+                        className='w-full h-[350px] max-sm:h-[200px] object-cover object-top'
+                    />
+                </div>
             </div>
         </Link>
     )
