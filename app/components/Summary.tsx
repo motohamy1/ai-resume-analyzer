@@ -1,13 +1,10 @@
 import ScoreGuage from "~/components/ScoreGuage";
 import ScoreBadge from "~/components/ScoreBadge";
 
-const Summary = ({feedback}:{feedback:Feedback}) => {
-
-    const textColor = score > 70 ? 'text-green-600'
-                     : score > 50
-                      ? 'text-yellow-600' : 'text-red-600';
-
     const Category = ({title, score} : {title: string, score: number}) => {
+        const textColor = score > 70 ? 'text-green-600'
+                             : score > 50
+                             ? 'text-yellow-600' : 'text-red-600';
         return (
             <div className='resume-summary'>
                 <div className='category'>
@@ -22,6 +19,8 @@ const Summary = ({feedback}:{feedback:Feedback}) => {
             </div>
         )
     }
+
+const Summary = ({feedback}:{feedback:Feedback}) => {
 
     return (
         <div className='bg-white rounded-2xl shadow-md w-full'>

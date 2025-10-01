@@ -33,12 +33,15 @@ const upload = () => {
         setStatusText('Converting to image...');
         const imageFile = await convertPdfToImage(file)
         if(!imageFile || !imageFile.file) {
-            return setStatusText('Error: Failed to convert pdf to image')}
+            const errorMsg = imageFile?.error || 'Unknown error during PDF conversion';
+            return setStatusText(`Error: ${errorMsg}`);
+        }
 
         setStatusText('Uploading the image...');
         const uploadingImage = await fs.upload([imageFile.file]);
         if(!uploadingImage) return setStatusText('Error: Failed to upload image');
-        setStatusText('Analyzing the image...');
+
+        setStatusText('Preparing data...');
         const uuid = generateUUID();
         const data = {
             id: uuid,
@@ -47,8 +50,9 @@ const upload = () => {
             companyName, jobTitle, jobDescription,
             feedback: '',
         }
-        await kv.set(uuid, JSON.stringify(data));
+        await kv.set(`resume:${uuid}`, JSON.stringify(data));
         setStatusText('analyzing...');
+
         const feedback = await ai.feedback(
             uploadedFile.path,
             prepareInstructions({AIResponseFormat: "", jobTitle, jobDescription })
@@ -56,10 +60,11 @@ const upload = () => {
         if(!feedback) return setStatusText('Error: Failed to get feedback');
 
         const feedbackText = typeof feedback.message.content === 'string'
-        ?  feedback.message.content : feedback.message.content[0].text;
+                                    ?  feedback.message.content
+                                    : feedback.message.content[0].text;
 
-        data.feedback = JSON.parse(feedbackText)
-        await kv.set(uuid, JSON.stringify(data));
+        data.feedback = JSON.parse(feedbackText);
+        await kv.set(`resume:${uuid}`, JSON.stringify(data));
         setStatusText('analysis complete, redirecting...');
         console.log(data);
         navigate(`/resume/${uuid}`);
@@ -75,7 +80,7 @@ const upload = () => {
         const jobTitle = formData.get('job-title') as string;
         const jobDescription = formData.get('job-description') as string;
 
-        if(!file) retrun:
+        if(!file) return;
         handleAnalyze({companyName, jobTitle, jobDescription, file});
     }
 
@@ -102,7 +107,6 @@ const upload = () => {
                     ):(
                         <h2>Drop your resume for an ATS score </h2>
                     )}
-
                     {!isProcessing && (
                         <form id='upload-form' onSubmit={handleSubmit}
                                 className='flex flex-col gap-4 mt-8'>
@@ -124,13 +128,12 @@ const upload = () => {
                             <div className='form-div'>
                                 <label htmlFor='uploader'>Upload Resume</label>
                                 <FileUploader onFileSelect={handleFileSelect} />
-
+                            </div>
                                 <button className='primary-button' type='submit'>
                                     Analyze Resume
                                 </button>
-                            </div>
                         </form>
-                        )}
+                    )}
                 </div>
             </section>
         </main>
