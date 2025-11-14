@@ -18,15 +18,29 @@ const Resume = () => {
     const [feedback, setFeedback] = useState<Feedback | null>(null);
     const navigate = useNavigate();
 
+
+
     useEffect(() => {
-        if(!isLoading && !auth.isAuthenticated) navigate(`/auth?next=/resume/${id}`);
-    }, [isLoading])
+        if (!id) {
+            navigate('/upload', { replace: true });
+        }
+    }, [id, navigate])
 
     useEffect(() => {
         const loadResume = async () => {
+            if (!id) {
+                console.log('No resume ID provided, redirecting to upload');
+                navigate('/upload', { replace: true });
+                return;
+            }
+
             const resume = await kv.get(`resume:${id}`);
 
-            if(!resume) return;
+            if(!resume) {
+                console.log('Resume not found, redirecting to upload');
+                navigate('/upload', { replace: true });
+                return;
+            }
 
             const data = JSON.parse(resume);
 
@@ -47,15 +61,18 @@ const Resume = () => {
         }
 
         loadResume();
-    }, [id]);
+    }, [id, navigate]);
 
     return (
         <main className="!pt-0">
             <nav className="resume-nav">
-                <Link to="/" className="back-button">
+                <Link to="/upload" className="back-button">
                     <img src="/icons/back.svg" alt="logo" className="w-2.5 h-2.5" />
                     <span className="text-gray-800 text-sm font-semibold">Back to Homepage</span>
                 </Link>
+                <button onClick={() => window.location.href = '/upload'} className="back-button ml-4">
+                    <span className="text-gray-800 text-sm font-semibold">Force Navigate</span>
+                </button>
             </nav>
             <div className="flex flex-row w-full max-lg:flex-col-reverse">
                 <section className="feedback-section bg-[url('/images/bg-small.svg') bg-cover h-[100vh] sticky top-0 items-center justify-center">
