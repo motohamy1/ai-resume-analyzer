@@ -42,8 +42,16 @@ export async function action({ request }: { request: Request }) {
     return json({ error: "Missing resumeText/jobTitle/jobDescription" }, { status: 400 });
   }
 
-  const host = process.env.OLLAMA_HOST?.trim() || "http://127.0.0.1:11434";
-  const model = process.env.OLLAMA_MODEL?.trim() || "lfm2.5-thinking:latest";
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    return json(
+      { error: "OPENROUTER_API_KEY environment variable is not configured" },
+      { status: 500 }
+    );
+  }
+
+  const model = process.env.OPENROUTER_MODEL?.trim() || "openrouter/free";
+  const baseUrl = process.env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1";
 
   const prompt = `You are an expert in ATS (Applicant Tracking System) and resume analysis.
 Please analyze and rate this resume and suggest how to improve it.
@@ -66,59 +74,79 @@ Job description: ${jobDescription}
 Resume:
 ${resumeText}`;
 
-  const ollamaResp = await fetch(`${host}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      stream: false,
-      messages: [
-        { role: "system", content: "Return JSON only." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
+  try {
+    const openRouterResp = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful assistant that always responds with valid JSON only. Never include markdown formatting or code blocks in your responses.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+      }),
+    });
 
-  const rawText = await ollamaResp.text();
-  if (!ollamaResp.ok) {
+    const rawText = await openRouterResp.text();
+    if (!openRouterResp.ok) {
+      return json(
+        { error: `OpenRouter API error ${openRouterResp.status} ${openRouterResp.statusText}`, details: rawText },
+        { status: 502 }
+      );
+    }
+
+    const parsedOuter = safeJsonParse<any>(rawText);
+    if (!parsedOuter.ok) {
+      const details = "error" in parsedOuter ? parsedOuter.error : "Unknown parse error";
+      return json(
+        { error: "Failed to parse OpenRouter API response", details, raw: rawText },
+        { status: 502 }
+      );
+    }
+
+    const content = parsedOuter.value?.choices?.[0]?.message?.content;
+    if (!content) {
+      return json(
+        { error: "OpenRouter API response missing choices[0].message.content", raw: parsedOuter.value },
+        { status: 502 }
+      );
+    }
+
+    // Try parsing the content directly as JSON
+    const direct = safeJsonParse<Feedback>(content.trim());
+    if (direct.ok) return json(direct.value);
+    const directError = "error" in direct ? direct.error : "Invalid JSON";
+
+    // Try extracting JSON from the content
+    const extracted = extractFirstJsonObject(content);
+    if (extracted) {
+      const extractedParsed = safeJsonParse<Feedback>(extracted);
+      if (extractedParsed.ok) return json(extractedParsed.value);
+    }
+
     return json(
-      { error: `Ollama error ${ollamaResp.status} ${ollamaResp.statusText}`, details: rawText },
+      {
+        error: "Model did not return valid JSON",
+        details: directError,
+        contentPreview: content.slice(0, 1000),
+      },
+      { status: 502 }
+    );
+  } catch (error) {
+    return json(
+      {
+        error: "Failed to call OpenRouter API",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 502 }
     );
   }
-
-  // Ollama returns JSON; message content is a string with JSON.
-  const parsedOuter = safeJsonParse<any>(rawText);
-  if (!parsedOuter.ok) {
-    const details = "error" in parsedOuter ? parsedOuter.error : "Unknown parse error";
-    return json(
-      { error: "Failed to parse Ollama response", details, raw: rawText },
-      { status: 502 }
-    );
-  }
-
-  const content: string | undefined = parsedOuter.value?.message?.content;
-  if (!content) {
-    return json({ error: "Ollama response missing message.content", raw: parsedOuter.value }, { status: 502 });
-  }
-
-  const direct = safeJsonParse<Feedback>(content.trim());
-  if (direct.ok) return json(direct.value);
-  const directError = "error" in direct ? direct.error : "Invalid JSON";
-
-  const extracted = extractFirstJsonObject(content);
-  if (extracted) {
-    const extractedParsed = safeJsonParse<Feedback>(extracted);
-    if (extractedParsed.ok) return json(extractedParsed.value);
-  }
-
-  return json(
-    {
-      error: "Model did not return valid JSON",
-      details: directError,
-      contentPreview: content.slice(0, 1000),
-    },
-    { status: 502 }
-  );
 }
-

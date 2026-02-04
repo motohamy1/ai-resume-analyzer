@@ -1,5 +1,12 @@
-import { redirect } from 'react-router';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
 
 export default function Index() {
-    return redirect('/upload');
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        navigate('/upload');
+    }, [navigate]);
+
+    return null;
 }
