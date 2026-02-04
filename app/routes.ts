@@ -1,7 +1,7 @@
 import {type RouteConfig, route} from "@react-router/dev/routes";
 
 export default [
-    route('/auth', 'routes/auth.tsx'),
+    // route('/auth', 'routes/auth.tsx'),
     route('/upload','routes/upload.tsx'),
     route('/resume/:id','routes/resume.tsx'),
     route('/api/analyze','routes/api.analyze.ts'),
