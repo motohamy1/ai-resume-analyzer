@@ -78,7 +78,7 @@ const CategoryContent = ({
             <div className="flex flex-col gap-4 w-full">
                 {tips.map((tip, index) => (
                     <div
-                        key={index + tip.tip}
+                        key={`${index}-${tip.tip || 'tip'}-${tip.type}`}
                         className={cn(
                             "flex flex-col gap-2 rounded-2xl p-4",
                             tip.type === "good"

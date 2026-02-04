@@ -1,22 +1,38 @@
 import {Link} from "react-router";
 import ScoreCircle from "~/components/ScoreCircle";
 import {useEffect, useState} from "react";
-import {usePuterStore} from "~/lib/puter";
+import {storage} from "~/lib/storage";
 
 const ResumeCard = ({ resume: { id, companyName, jobTitle, feedback, imagePath } }: { resume: Resume }) => {
-    const { fs } = usePuterStore();
     const [resumeUrl, setResumeUrl] = useState('');
 
     useEffect(() => {
         const loadResume = async () => {
-            const blob = await fs.read(imagePath);
-            if(!blob) return;
-            let url = URL.createObjectURL(blob);
-            setResumeUrl(url);
+            // Try to load from storage first (for stored resumes with imageUrl)
+            const storedResume = storage.get(`resume:${id}`);
+            if (storedResume) {
+                try {
+                    const data = JSON.parse(storedResume);
+                    if (data.imageUrl) {
+                        setResumeUrl(data.imageUrl);
+                        return;
+                    }
+                } catch (e) {
+                    // Fall through to imagePath handling
+                }
+            }
+            
+            // Fallback to imagePath (for static files or data URLs)
+            if (imagePath) {
+                // If it's a data URL or absolute URL, use it directly
+                if (imagePath.startsWith('data:') || imagePath.startsWith('http') || imagePath.startsWith('/')) {
+                    setResumeUrl(imagePath);
+                }
+            }
         }
 
         loadResume();
-    }, [imagePath]);
+    }, [imagePath, id]);
 
     return (
         <Link to={`/resume/${id}`} className="resume-card animate-in fade-in duration-1000">

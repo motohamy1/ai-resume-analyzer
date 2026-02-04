@@ -3,6 +3,8 @@ import Navbar from "~/components/Navbar";
 import FileUploader from "~/components/FileUploader";
 import {useNavigate} from "react-router";
 import {convertPdfToImage} from "~/lib/pdf2img";
+import {extractTextFromPdf} from "~/lib/pdfText";
+import {analyzeResume} from "~/lib/aiAnalysis";
 import {generateUUID} from "~/lib/utils";
 import {storage} from "~/lib/storage";
 
@@ -19,51 +21,114 @@ const upload = () => {
     }
 
     const handleAnalyze = async ({companyName, jobTitle, jobDescription, file} : {companyName: string, jobTitle: string, jobDescription: string, file: File | null}) => {
+        console.log('handleAnalyze called', { companyName, jobTitle, jobDescription, fileName: file?.name });
+        
         setIsProcessing(true);
+        setStatusText('Starting analysis...');
+        
         if (!file) {
+            console.error('No file selected');
             setStatusText('Error: No file selected');
+            setIsProcessing(false);
             return;
         }
-        setStatusText('Converting to image...');
-        const imageFile = await convertPdfToImage(file)
-        if(!imageFile || !imageFile.file) {
-            const errorMsg = imageFile?.error || 'Unknown error during PDF conversion';
-            return setStatusText(`Error: ${errorMsg}`);
+
+        if (!jobTitle || !jobDescription) {
+            console.error('Missing required fields', { jobTitle, jobDescription });
+            setStatusText('Error: Please fill in all required fields (Job Title and Job Description)');
+            setIsProcessing(false);
+            return;
         }
 
-        setStatusText('Preparing data...');
-        const uuid = generateUUID();
-        const data = {
-            id: uuid,
-            imageUrl: imageFile.imageUrl,
-            companyName, 
-            jobTitle, 
-            jobDescription,
-            feedback: {
-                overallScore: 75,
-                ATS: { score: 80, tips: [{type: 'improve', tip: 'Add more keywords from job description'}] },
-                toneAndStyle: { score: 70, tips: [{type: 'good', tip: 'Professional tone', explanation: 'Your resume maintains a professional tone'}] },
-                content: { score: 75, tips: [{type: 'improve', tip: 'Quantify achievements', explanation: 'Add numbers and metrics to your achievements'}] },
-                structure: { score: 80, tips: [{type: 'good', tip: 'Clear sections', explanation: 'Resume has well-defined sections'}] },
-                skills: { score: 70, tips: [{type: 'improve', tip: 'Add technical skills', explanation: 'Include more relevant technical skills'}] }
+        try {
+            console.log('Step 1: Converting PDF to image...');
+            setStatusText('Converting PDF to image...');
+            const imageFile = await convertPdfToImage(file)
+            if(!imageFile || !imageFile.file) {
+                const errorMsg = imageFile?.error || 'Unknown error during PDF conversion';
+                console.error('PDF conversion failed:', errorMsg);
+                setStatusText(`Error: ${errorMsg}`);
+                setIsProcessing(false);
+                return;
             }
-        };
-        storage.set(`resume:${uuid}`, JSON.stringify(data));
-        setStatusText('Analysis complete, redirecting...');
-        navigate(`/resume/${uuid}`);
+            console.log('PDF converted successfully');
+
+            console.log('Step 2: Extracting text...');
+            setStatusText('Extracting text from resume...');
+            const resumeText = await extractTextFromPdf(file);
+            if (!resumeText || resumeText.trim().length === 0) {
+                console.error('No text extracted from PDF');
+                setStatusText('Error: Could not extract text from PDF. Please ensure the PDF contains readable text.');
+                setIsProcessing(false);
+                return;
+            }
+            console.log('Text extracted, length:', resumeText.length);
+
+            console.log('Step 3: Calling AI analysis...');
+            setStatusText('Analyzing resume with AI... This may take a moment...');
+            const feedback = await analyzeResume(resumeText, jobTitle, jobDescription);
+            console.log('AI analysis complete:', feedback);
+
+            console.log('Step 4: Saving results...');
+            setStatusText('Saving results...');
+            const uuid = generateUUID();
+            const data = {
+                id: uuid,
+                imageUrl: imageFile.imageUrl,
+                companyName, 
+                jobTitle, 
+                jobDescription,
+                feedback
+            };
+            storage.set(`resume:${uuid}`, JSON.stringify(data));
+            console.log('Data saved with ID:', uuid);
+            
+            setStatusText('Analysis complete, redirecting...');
+            console.log('Navigating to:', `/resume/${uuid}`);
+            navigate(`/resume/${uuid}`);
+        } catch (error) {
+            console.error('Analysis error:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            console.error('Error details:', {
+                message: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            setStatusText(`Error: ${errorMessage}. Please check the browser console (F12) for details.`);
+            setIsProcessing(false);
+            // Don't navigate away on error - let user see the error message
+        }
     }
 
     const handleSubmit = (e:  FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const form = e.currentTarget.closest('form');
-        if(!form) return;
+        e.stopPropagation();
+        
+        console.log('Form submitted');
+        const form = e.currentTarget;
+        if(!form) {
+            console.error('Form not found');
+            return;
+        }
+        
         const formData = new FormData(form);
-
         const companyName = formData.get('company-name') as string;
         const jobTitle = formData.get('job-title') as string;
         const jobDescription = formData.get('job-description') as string;
 
-        if(!file) return;
+        console.log('Form data:', { companyName, jobTitle, jobDescription, hasFile: !!file });
+
+        if(!file) {
+            setStatusText('Error: Please select a PDF file');
+            setIsProcessing(false);
+            return;
+        }
+
+        if(!jobTitle || !jobDescription) {
+            setStatusText('Error: Please fill in Job Title and Job Description');
+            setIsProcessing(false);
+            return;
+        }
+
         handleAnalyze({companyName, jobTitle, jobDescription, file});
     }
 
@@ -80,7 +145,7 @@ const upload = () => {
 
                     {isProcessing ? (
                         <>
-                            <h2>{statusText}</h2>
+                            <h2 className="text-xl font-semibold">{statusText}</h2>
                             <img
                                  src='/images/resume-scan.gif'
                                  alt='resume scan gif'
@@ -88,7 +153,15 @@ const upload = () => {
                             />
                         </>
                     ):(
-                        <h2>Drop your resume for an ATS score </h2>
+                        <>
+                            <h2>Drop your resume for an ATS score </h2>
+                            {statusText && statusText.startsWith('Error:') && (
+                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mt-4">
+                                    <p className="font-bold">Error</p>
+                                    <p>{statusText}</p>
+                                </div>
+                            )}
+                        </>
                     )}
                     {!isProcessing && (
                         <form id='upload-form' onSubmit={handleSubmit}
@@ -112,8 +185,12 @@ const upload = () => {
                                 <label htmlFor='uploader'>Upload Resume</label>
                                 <FileUploader onFileSelect={handleFileSelect} />
                             </div>
-                                <button className='primary-button' type='submit'>
-                                    Analyze Resume
+                                <button 
+                                    className='primary-button' 
+                                    type='submit'
+                                    disabled={isProcessing}
+                                >
+                                    {isProcessing ? 'Processing...' : 'Analyze Resume'}
                                 </button>
                         </form>
                     )}

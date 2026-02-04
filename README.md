@@ -26,7 +26,13 @@ npm install
 
 ### Development
 
-Start the development server with HMR:
+1. Set up your OpenAI API key:
+   Create a `.env` file in the root directory:
+   ```bash
+   VITE_OPENAI_API_KEY=your_openai_api_key_here
+   ```
+
+2. Start the development server with HMR:
 
 ```bash
 npm run dev
